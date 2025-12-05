@@ -1,24 +1,30 @@
 diff --git a/node_modules/@react-native/gradle-plugin/build.gradle.kts b/node_modules/@react-native/gradle-plugin/build.gradle.kts
-index 6e09a3e..9c2609a 100644
+index 6e09a3e..5ed5d70 100644
 --- a/node_modules/@react-native/gradle-plugin/build.gradle.kts
 +++ b/node_modules/@react-native/gradle-plugin/build.gradle.kts
-@@ -4,10 +4,8 @@
+@@ -4,10 +4,7 @@
   * This source code is licensed under the MIT license found in the
   * LICENSE file in the root directory of this source tree.
   */
 -
- import org.gradle.api.internal.classpath.ModuleRegistry
+-import org.gradle.api.internal.classpath.ModuleRegistry
  import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 -import org.gradle.configurationcache.extensions.serviceOf
  import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
  
  plugins {
-@@ -51,7 +49,7 @@ dependencies {
+@@ -48,14 +45,6 @@ dependencies {
+   implementation(libs.javapoet)
  
-   testRuntimeOnly(
-       files(
+   testImplementation(libs.junit)
+-
+-  testRuntimeOnly(
+-      files(
 -          serviceOf<ModuleRegistry>()
-+          gradle.services.get(ModuleRegistry::class.java)
-               .getModule("gradle-tooling-api-builders")
-               .classpath
-               .asFiles
+-              .getModule("gradle-tooling-api-builders")
+-              .classpath
+-              .asFiles
+-              .first()))
+ }
+ 
+ // We intentionally don't build for Java 17 as users will see a cryptic bytecode version
