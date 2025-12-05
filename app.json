@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "Flexify",
+    "slug": "Flexify",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/appicon.jpeg",
+    "scheme": "myapp",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/images/appicon.jpeg",
+      "resizeMode": "contain",
+      "backgroundColor": "#1E1E25"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.devyashjangid.Flexify",
+      "googleServicesFile": "./GoogleService-Info.plist"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/appicon.jpeg",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.devyashjangid.Flexify",
+      "googleServicesFile": "./google-services.json"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/images/appicon.jpeg"
+    },
+    "plugins": [
+      "expo-router",
+      "@react-native-google-signin/google-signin",
+      "@react-native-firebase/app"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "4ea416e5-fb73-47b3-9ef6-be56596523a7"
+      }
+    },
+    "owner": "mooncute"
+  }
+}
