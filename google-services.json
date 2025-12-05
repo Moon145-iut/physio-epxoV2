@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "570344049604",
+    "project_id": "fitmephysio-21bb2",
+    "storage_bucket": "fitmephysio-21bb2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:570344049604:android:8c3c05fa4032218e6bf291",
+        "android_client_info": {
+          "package_name": "com.devyashjangid.Flexify"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCdvYHHSG9jIqXcCNqMEGPN-59Dc5QAeXs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
