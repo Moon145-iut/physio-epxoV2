@@ -1,0 +1,108 @@
+diff --git a/node_modules/@react-native/gradle-plugin/build.gradle.kts b/node_modules/@react-native/gradle-plugin/build.gradle.kts
+index 4a0905d..c6ee451 100644
+--- a/node_modules/@react-native/gradle-plugin/build.gradle.kts
++++ b/node_modules/@react-native/gradle-plugin/build.gradle.kts
+@@ -5,22 +5,85 @@
+  * LICENSE file in the root directory of this source tree.
+  */
+ 
+-plugins { alias(libs.plugins.kotlin.jvm).apply(false) }
+-
+-tasks.register("build") {
+-  dependsOn(
+-      ":react-native-gradle-plugin:build",
+-      ":settings-plugin:build",
+-      ":shared-testutil:build",
+-      ":shared:build",
+-  )
+-}
+-
+-tasks.register("clean") {
+-  dependsOn(
+-      ":react-native-gradle-plugin:clean",
+-      ":settings-plugin:clean",
+-      ":shared-testutil:clean",
+-      ":shared:clean",
+-  )
++import org.gradle.api.tasks.testing.logging.TestExceptionFormat
++import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
++
++plugins {
++  alias(libs.plugins.kotlin.jvm)
++  id("java-gradle-plugin")
++}
++
++repositories {
++  google()
++  mavenCentral()
++}
++
++gradlePlugin {
++  plugins {
++    // Main React Native Gradle plugin
++    create("react") {
++      id = "com.facebook.react"
++      implementationClass = "com.facebook.react.ReactPlugin"
++    }
++
++    // Root project plugin (used by older templates)
++    create("reactrootproject") {
++      id = "com.facebook.react.rootproject"
++      implementationClass = "com.facebook.react.ReactRootProjectPlugin"
++    }
++
++    // Alias used by newer templates/settings.gradle
++    // android/settings.gradle requests plugin id "com.facebook.react.settings".
++    // We map that id to the existing ReactRootProjectPlugin implementation.
++    create("reactsettings") {
++      id = "com.facebook.react.settings"
++      implementationClass = "com.facebook.react.ReactRootProjectPlugin"
++    }
++  }
++}
++
++group = "com.facebook.react"
++
++dependencies {
++  implementation(gradleApi())
++
++  // The KGP/AGP version is defined by the React Native Gradle plugin.
++  // Therefore we specify an implementation dep rather than a compileOnly.
++  implementation(libs.kotlin.gradle.plugin)
++  implementation(libs.android.gradle.plugin)
++
++  implementation(libs.gson)
++  implementation(libs.guava)
++  implementation(libs.javapoet)
++
++  testImplementation(libs.junit)
++}
++
++// We intentionally don't build for Java 17 as users will see a cryptic bytecode version
++// error first. Instead we produce a Java 11-compatible Gradle Plugin, so that AGP can print their
++// nice message showing that JDK 11 (or 17) is required first.
++java {
++  targetCompatibility = JavaVersion.VERSION_11
++}
++
++kotlin {
++  jvmToolchain(17)
++}
++
++tasks.withType<KotlinCompile>().configureEach {
++  kotlinOptions {
++    apiVersion = "1.6"
++    // See comment above on JDK 11 support.
++    jvmTarget = "11"
++    allWarningsAsErrors = true
++  }
++}
++
++tasks.withType<Test>().configureEach {
++  testLogging {
++    exceptionFormat = TestExceptionFormat.FULL
++    showExceptions = true
++    showCauses = true
++    showStackTraces = true
++  }
+ }
