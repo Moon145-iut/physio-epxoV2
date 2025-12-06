@@ -4,11 +4,11 @@
     "slug": "Flexify",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/appicon.jpeg",
+    "icon": "./assets/images/appicon.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./assets/images/appicon.jpeg",
+      "image": "./assets/images/appicon.png",
       "resizeMode": "contain",
       "backgroundColor": "#1E1E25"
     },
@@ -19,7 +19,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/appicon.jpeg",
+        "foregroundImage": "./assets/images/appicon.png",
         "backgroundColor": "#ffffff"
       },
       "package": "com.devyashjangid.Flexify",
@@ -28,12 +28,13 @@
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/appicon.jpeg"
+      "favicon": "./assets/images/appicon.png"
     },
     "plugins": [
       "expo-router",
       "@react-native-google-signin/google-signin",
-      "@react-native-firebase/app"
+      "@react-native-firebase/app",
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true
