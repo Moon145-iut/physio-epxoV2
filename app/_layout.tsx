@@ -12,12 +12,12 @@ export default function RootLayout() {
       <Stack>
         <Stack.Screen name="index" options={{headerShown:false, animation:'fade_from_bottom'}}/>
         <Stack.Screen name="(tabs)" options={{ headerShown: false, animation:'fade_from_bottom' }} />
-        <Stack.Screen name="profile" options={{ headerShown:false, animation:'ios'}}/>
-        <Stack.Screen name='userdetails' options={{headerShown:false, animation:'ios'}}/>
-        <Stack.Screen name='exercise' options={{headerShown:false, animation:'ios'}}/>
-        <Stack.Screen name='statGraphs' options={{headerShown:false, animation:'ios'}}/>
-        <Stack.Screen name='mealData' options={{headerShown:false, animation:'ios'}}/>
-        <Stack.Screen name='performWorkouts' options={{headerShown:false, animation:'ios'}}/>
+        <Stack.Screen name="profile" options={{ headerShown:false, animation:'default'}}/>
+        <Stack.Screen name='userdetails' options={{headerShown:false, animation:'default'}}/>
+        <Stack.Screen name='exercise' options={{headerShown:false, animation:'default'}}/>
+        <Stack.Screen name='statGraphs' options={{headerShown:false, animation:'default'}}/>
+        <Stack.Screen name='mealData' options={{headerShown:false, animation:'default'}}/>
+        <Stack.Screen name='performWorkouts' options={{headerShown:false, animation:'default'}}/>
       </Stack>
     </View>
   )

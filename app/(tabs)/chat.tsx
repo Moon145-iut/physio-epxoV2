@@ -18,7 +18,7 @@ const chat = memo(() => {
     userInfo: state.userInfo
   }))
 
-  const textInputRef = useRef(null);
+  const textInputRef = useRef<TextInput | null>(null);
   const [text, setText] = useState<string>("")
   const [image, setImage] = useState<string | null>(null)
   const [kbFocused, setKbFocused] = useState<boolean>(false)

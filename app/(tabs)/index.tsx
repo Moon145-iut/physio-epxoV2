@@ -29,7 +29,7 @@ const index = memo(() => {
 
   const [isExpanded, setIsExpanded] = useState<boolean>(false)
   const daysOfWeek = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-  const monthsOfYear = ['January', 'February', 'March', 'April', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+  const monthsOfYear = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
   const [pastActivity, setPastActivity] = useState<Activity>({ steps: 0, caloriesBurnt: 0, distance: 0 })
   const [totalWalkDistance, setTotalWalkDistance] = useState<number>(0)
   const [totalSprintDistance, setTotalSprintDistance] = useState<number>(0)
@@ -76,17 +76,23 @@ const index = memo(() => {
     fetchIngred("Salmon")
   }, [])
 
-  useFocusEffect(
-    useCallback(() => {
-      const onBackPress = () => {
-        return true;
-      };
-      BackHandler.addEventListener('hardwareBackPress', onBackPress);
-      return () => {
-        BackHandler.removeEventListener('hardwareBackPress', onBackPress);
-      };
-    }, [])
-  );
+ useFocusEffect(
+  useCallback(() => {
+    const onBackPress = () => {
+      return true;
+    };
+
+    const subscription = BackHandler.addEventListener(
+      'hardwareBackPress',
+      onBackPress
+    );
+
+    return () => {
+      subscription.remove(); // ✅ correct for new API
+    };
+  }, [])
+);
+
 
   return (
     <SafeAreaView className='flex-1 bg-background px-2 py-2 align-middle'>

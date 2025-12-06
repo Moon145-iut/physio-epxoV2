@@ -28,10 +28,10 @@ const mealData = memo(() => {
   }))
 
   const ingredients = mealData ? (function () {
-    const tempIngredients = [];
+    const tempIngredients: IngredientData[] = [];
     for (let i = 1; i <= 20; i++) {
-      const ingredient = mealData[`strIngredient${i}`];
-      const measure = mealData[`strMeasure${i}`];
+      const ingredient = mealData[`strIngredient${i}` as keyof MealData] as string | null;
+      const measure = mealData[`strMeasure${i}` as keyof MealData] as string | null;
       if (ingredient?.trim() !== '' && measure) {
         tempIngredients.push({ ingredient, measure });
       }
