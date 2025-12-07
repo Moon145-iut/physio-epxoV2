@@ -1,13 +1,64 @@
 import { create } from "zustand";
-import { GoogleSignin, User } from "@react-native-google-signin/google-signin";
+//import { GoogleSignin, User } from "@react-native-google-signin/google-signin";
 import { router } from "expo-router";
 import { Pedometer } from "expo-sensors";
-import firestore from '@react-native-firebase/firestore';
+//import firestore from '@react-native-firebase/firestore';
 import { Alert } from "react-native";
-import { Content, GoogleGenerativeAI } from "@google/generative-ai";
+import { Content, Part, GoogleGenerativeAI } from "@google/generative-ai";
 import { GEMINI_API_KEY } from "@/Keys";
 import { UserData, Activity, ExerciseData, Meal, MealData, ChatMessage } from "@/global";
-import * as RNFS from 'react-native-fs';
+//import * as RNFS from 'react-native-fs';
+import * as FileSystem from 'expo-file-system';
+import { Platform } from 'react-native';
+
+// Minimal User type compatible with how you use it in the app
+type MockUser = {
+  user: {
+    email: string;
+    givenName?: string;
+    photo?: string;
+  };
+};
+type User = MockUser;
+
+// Simple in-memory "database" for dev
+const mockDb: { [email: string]: any } = {};
+
+// Fake Google Signin object so nothing native is called
+const GoogleSignin = {
+  hasPlayServices: async () => true,
+  signIn: async (): Promise<MockUser> => ({
+    user: {
+      email: "test@example.com",
+      givenName: "Test User",
+      photo: "",
+    },
+  }),
+  getCurrentUser: async (): Promise<MockUser | null> => null,
+  signOut: async () => {},
+};
+
+// Fake firestore() that reads/writes from mockDb instead of real Firebase
+const firestore = () => ({
+  collection: (name: string) => ({
+    doc: (id: string | undefined) => {
+      const key = `${name}:${id}`;
+      return {
+        get: async () => ({
+          exists: !!mockDb[key],
+          data: () => mockDb[key],
+        }),
+        set: async (value: any) => {
+          mockDb[key] = value;
+        },
+        update: async (value: any) => {
+          mockDb[key] = { ...(mockDb[key] || {}), ...value };
+        },
+      };
+    },
+  }),
+});
+
 
 let subscription: Pedometer.Subscription;
 
@@ -311,40 +362,85 @@ export const useStore = create<State>((set, get) => ({
       console.log(error)
     }
   },
-  getGeminiResponse: async (prompt: string, image: string | null = null): Promise<string> => {
-    set({ geminiLoading: true });
-    try {
-      const history = get().contextHistory
-      const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-      const chat = model.startChat({
-        history: history,
-      })
-      let result;
-      if (image) {
-        const fsImage = await RNFS.readFile(image, 'base64');
-        const img = {
-          inlineData: {
-            data: fsImage,
-            mimeType: "image/png",
-          },
-        };
-        result = await chat.sendMessage(["Which food is this? Please Fetch nutritional info about this food even if its not accurate, is this a health food?", img])
+  getGeminiResponse: async (prompt: string, image: string | null = null) => {
+  const { contextHistory } = get();
+  set({ geminiLoading: true });
+
+  try {
+    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const chat = model.startChat({ history: contextHistory });
+
+    let result;
+
+    if (image) {
+      let base64: string;
+
+      if (Platform.OS === 'web') {
+        // Web: use fetch + FileReader
+        const response = await fetch(image);
+        const blob = await response.blob();
+
+        base64 = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onerror = () => reject(reader.error);
+          reader.onload = () => {
+            const dataUrl = reader.result as string;
+            // strip "data:...;base64,"
+            const commaIndex = dataUrl.indexOf(',');
+            resolve(commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl);
+          };
+          reader.readAsDataURL(blob);
+        });
       } else {
-        result = await chat.sendMessage(prompt)
+        // Native (Android / iOS): use Expo FileSystem
+       // Native (Android / iOS): use Expo FileSystem
+      base64 = await FileSystem.readAsStringAsync(image, {
+  encoding: 'base64',
+});
+
       }
-      const response = result.response;
-      const text = response.text();
-      set({ messages: [...get().messages, { message: text, ai: true, time: new Date().toLocaleTimeString().slice(0, -3) }] });
-      set({ contextHistory: history })
-      return text;
-    } catch (error) {
-      console.log(error);
-      return '';
-    } finally {
-      set({ geminiLoading: false });
+
+      const imagePart: Part = {
+        inlineData: {
+          data: base64,
+          mimeType: "image/png",
+        },
+      };
+
+      result = await chat.sendMessage([
+        prompt,
+        imagePart,
+      ]);
+    } else {
+      result = await chat.sendMessage(prompt);
     }
-  },
+
+    const response = result.response;
+    const text = response.text();
+
+    set({
+      messages: [
+        ...get().messages,
+        {
+          message: text,
+          ai: true,
+          time: new Date().toLocaleTimeString().slice(0, -3),
+        },
+      ],
+      contextHistory,
+    });
+
+    return text;
+  } catch (e) {
+    console.log('Gemini error', e);
+    Alert.alert('Error', 'Failed to get response from Gemini.');
+    return '';
+  } finally {
+    set({ geminiLoading: false });
+  }
+},
+
   feedInitialGeminiData: async (activityList: Activity[]) => {
     try {
       const history = get().contextHistory

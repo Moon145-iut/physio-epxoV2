@@ -2,6 +2,7 @@ import { View, Text, Image, Pressable } from 'react-native'
 import React, { useState } from 'react'
 import * as Progress from 'react-native-progress';
 import Collapsible from 'react-native-collapsible';
+import type { ExerciseData } from '@/global';
 
 
 interface WorkoutRecordCardProps {

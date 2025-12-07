@@ -13,9 +13,7 @@
       "backgroundColor": "#1E1E25"
     },
     "ios": {
-      "supportsTablet": true,
-      "bundleIdentifier": "com.devyashjangid.Flexify",
-      "googleServicesFile": "./GoogleService-Info.plist"
+      
     },
     "android": {
       "adaptiveIcon": {
