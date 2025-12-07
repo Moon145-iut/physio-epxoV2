@@ -1,17 +1,22 @@
 import { create } from "zustand";
-//import { GoogleSignin, User } from "@react-native-google-signin/google-signin";
 import { router } from "expo-router";
 import { Pedometer } from "expo-sensors";
-//import firestore from '@react-native-firebase/firestore';
-import { Alert } from "react-native";
+import { Alert, Platform } from "react-native";
 import { Content, Part, GoogleGenerativeAI } from "@google/generative-ai";
 import { GEMINI_API_KEY } from "@/Keys";
-import { UserData, Activity, ExerciseData, Meal, MealData, ChatMessage } from "@/global";
-//import * as RNFS from 'react-native-fs';
-import * as FileSystem from 'expo-file-system';
-import { Platform } from 'react-native';
+import {
+  UserData,
+  Activity,
+  ExerciseData,
+  Meal,
+  MealData,
+  ChatMessage,
+} from "@/global";
+import * as FileSystem from "expo-file-system";
 
-// Minimal User type compatible with how you use it in the app
+// ---------- Mock user / auth / firestore so RNGoogleSignin & Firebase
+// ---------- don't crash Expo Go while you develop ----------
+
 type MockUser = {
   user: {
     email: string;
@@ -19,12 +24,11 @@ type MockUser = {
     photo?: string;
   };
 };
+
 type User = MockUser;
 
-// Simple in-memory "database" for dev
-const mockDb: { [email: string]: any } = {};
+const mockDb: { [key: string]: any } = {};
 
-// Fake Google Signin object so nothing native is called
 const GoogleSignin = {
   hasPlayServices: async () => true,
   signIn: async (): Promise<MockUser> => ({
@@ -38,7 +42,6 @@ const GoogleSignin = {
   signOut: async () => {},
 };
 
-// Fake firestore() that reads/writes from mockDb instead of real Firebase
 const firestore = () => ({
   collection: (name: string) => ({
     doc: (id: string | undefined) => {
@@ -59,63 +62,79 @@ const firestore = () => ({
   }),
 });
 
+let subscription: Pedometer.Subscription | null = null;
 
-let subscription: Pedometer.Subscription;
+// ---------- State types ----------
 
-type state = {
+type StateShape = {
   userInfo: User | null;
   userData: UserData;
-  activity: Activity,
-  refActivity: Activity,
-  isExercising: boolean,
-  exerciseIntensity: number,
-  currentExercise: string | undefined,
-  exerciseData: ExerciseData | null,
-  exerciseRecord: ExerciseData[],
-  activityList: Activity[]
+  activity: Activity;
+  refActivity: Activity;
+  isExercising: boolean;
+  exerciseIntensity: number;
+  currentExercise: string | undefined;
+  exerciseData: ExerciseData | null;
+  exerciseRecord: ExerciseData[];
+  activityList: Activity[];
   date: string;
-  meals: Meal[],
-  mealLoading: boolean,
-  mealData: MealData | null,
-  messages: ChatMessage[],
-  geminiLoading: boolean,
-  contextHistory: Content[]
-}
+  meals: Meal[];
+  mealLoading: boolean;
+  mealData: MealData | null;
+  messages: ChatMessage[];
+  geminiLoading: boolean;
+  contextHistory: Content[];
+};
 
-type actions = {
+type Actions = {
   signIn: () => Promise<void>;
   checkIfAlreadySignedIn: () => Promise<void>;
   signOut: () => Promise<void>;
   setUserData: () => Promise<void>;
   startStepCounter: (userData: UserData) => Promise<void>;
-  calculateCalories: (steps: number, user: UserData, intensity: number, exercise: string) => number,
-  calculateDistance: (steps: number, user: UserData, intensity: number) => number,
+  calculateCalories: (
+    steps: number,
+    user: UserData,
+    intensity: number,
+    exercise: string
+  ) => number;
+  calculateDistance: (
+    steps: number,
+    user: UserData,
+    intensity: number
+  ) => number;
   stopStepCounter: () => void;
-  startExercise: () => void,
-  updateDailyStats: () => Promise<void>,
-  fetchCat: (category: string) => Promise<void>,
-  fetchIngred: (ingred: string) => Promise<void>,
-  fetchMealData: (id: string) => Promise<void>,
-  getGeminiResponse: (prompt: string, image?: string | null) => Promise<string>,
-  feedInitialGeminiData: (activityList: Activity[]) => Promise<void>
-}
+  startExercise: () => void;
+  updateDailyStats: () => Promise<void>;
+  fetchCat: (category: string) => Promise<void>;
+  fetchIngred: (ingred: string) => Promise<void>;
+  fetchMealData: (id: string) => Promise<void>;
+  getGeminiResponse: (prompt: string, image?: string | null) => Promise<string>;
+  feedInitialGeminiData: (activityList: Activity[]) => Promise<void>;
+};
 
-type State = state & actions;
+type State = StateShape & Actions;
+
+// ---------- Store ----------
 
 export const useStore = create<State>((set, get) => ({
-
   userInfo: null,
-  userData: { weight: 0, height: 0, stepGoal: 10000, caloriesGoal: 700, distanceGoal: 3000 },
+  userData: {
+    weight: 0,
+    height: 0,
+    stepGoal: 10000,
+    caloriesGoal: 700,
+    distanceGoal: 3000,
+  },
   activity: { steps: 0, caloriesBurnt: 0, distance: 0 },
   refActivity: { steps: 0, caloriesBurnt: 0, distance: 0 },
-  subscription: null,
-  currentExercise: 'walk',
+  currentExercise: "walk",
   exerciseData: null,
   isExercising: false,
   exerciseIntensity: 1,
   exerciseRecord: [],
   activityList: [],
-  date: new Date().toISOString().split('T')[0],
+  date: new Date().toISOString().split("T")[0],
   meals: [],
   mealLoading: false,
   mealData: null,
@@ -123,27 +142,39 @@ export const useStore = create<State>((set, get) => ({
   geminiLoading: false,
   contextHistory: [],
 
+  // ---------- Auth ----------
+
   signIn: async () => {
     try {
       await GoogleSignin.hasPlayServices();
       const userInfo = await GoogleSignin.signIn();
       set({ userInfo });
-      const userRef = firestore().collection('Users').doc(userInfo.user.email);
+
+      const userRef = firestore().collection("Users").doc(userInfo.user.email);
       const userSnapshot = await userRef.get();
+
       if (!userSnapshot.exists) {
-        router.navigate(`/userdetails`);
+        router.navigate("/userdetails");
       } else {
         const data = userSnapshot.data();
         if (data && data.userData) {
-          set({ userData: data.userData, exerciseRecord: data.exerciseRecord, activityList: data.activityList });
-          const todaysActivity = get().activityList.find((p: Activity) => p.date?.toString() === get().date.toString())
+          set({
+            userData: data.userData,
+            exerciseRecord: data.exerciseRecord ?? [],
+            activityList: data.activityList ?? [],
+          });
+
+          const todaysActivity = get().activityList.find(
+            (p: Activity) => p.date?.toString() === get().date.toString()
+          );
           if (todaysActivity) {
-            set({ activity: todaysActivity })
+            set({ activity: todaysActivity });
           }
-          get().feedInitialGeminiData(data.activityList)
-          get().startStepCounter(data.userData)
+
+          get().feedInitialGeminiData(data.activityList ?? []);
+          get().startStepCounter(data.userData);
         }
-        router.navigate(`/(tabs)`);
+        router.navigate("/(tabs)");
       }
     } catch (error) {
       console.log(error);
@@ -154,29 +185,50 @@ export const useStore = create<State>((set, get) => ({
     const userInfo = await GoogleSignin.getCurrentUser();
     if (userInfo !== null) {
       set({ userInfo });
-      const userRef = firestore().collection('Users').doc(userInfo.user.email);
+
+      const userRef = firestore().collection("Users").doc(userInfo.user.email);
       const userSnapshot = await userRef.get();
       const data = userSnapshot.data();
+
       if (data) {
         set({ userData: data.userData });
+
         if (data.exerciseRecord) {
-          set({ exerciseRecord: data.exerciseRecord, activityList: data.activityList })
-          const todaysActivity = get().activityList.find((p: Activity) => p.date?.toString() === get().date.toString())
+          set({
+            exerciseRecord: data.exerciseRecord,
+            activityList: data.activityList ?? [],
+          });
+
+          const todaysActivity = get().activityList.find(
+            (p: Activity) => p.date?.toString() === get().date.toString()
+          );
           if (todaysActivity) {
-            set({ activity: todaysActivity })
+            set({ activity: todaysActivity });
           }
         }
-        get().feedInitialGeminiData(data.activityList)
-        get().startStepCounter(data.userData)
+
+        get().feedInitialGeminiData(data.activityList ?? []);
+        get().startStepCounter(data.userData);
       }
-      router.navigate(`/(tabs)`);
+
+      router.navigate("/(tabs)");
     }
   },
 
   signOut: async () => {
     try {
       await GoogleSignin.signOut();
-      set({ userInfo: null, userData: { weight: 0, height: 0, stepGoal: 10000, caloriesGoal: 700, distanceGoal: 3000 }, exerciseRecord: [] });
+      set({
+        userInfo: null,
+        userData: {
+          weight: 0,
+          height: 0,
+          stepGoal: 10000,
+          caloriesGoal: 700,
+          distanceGoal: 3000,
+        },
+        exerciseRecord: [],
+      });
       router.dismissAll();
     } catch (error) {
       console.log(error);
@@ -185,94 +237,131 @@ export const useStore = create<State>((set, get) => ({
 
   setUserData: async () => {
     try {
-      const userRef = firestore().collection('Users').doc(get().userInfo?.user.email);
+      const email = get().userInfo?.user.email;
+      if (!email) return;
+
+      const userRef = firestore().collection("Users").doc(email);
       await userRef.set({
         userData: get().userData,
         exerciseRecord: get().exerciseRecord,
-        activityList: []
+        activityList: [],
       });
-      get().startStepCounter(get().userData!!)
-      router.navigate(`/(tabs)`);
+
+      await get().startStepCounter(get().userData);
+      router.navigate("/(tabs)");
     } catch (error) {
       console.log(error);
     }
   },
 
+  // ---------- Pedometer / exercise ----------
+
   startStepCounter: async (userData: UserData) => {
     try {
       get().stopStepCounter();
+
       const isAvailable = await Pedometer.isAvailableAsync();
       if (!isAvailable) {
-        Alert.alert('Pedometer not available', 'Step count will not work because the device lacks necessary sensors');
+        Alert.alert(
+          "Pedometer not available",
+          "Step count will not work because the device lacks necessary sensors"
+        );
         return;
       }
+
       let perms = await Pedometer.getPermissionsAsync();
       if (!perms.granted) {
         await Pedometer.requestPermissionsAsync();
         perms = await Pedometer.getPermissionsAsync();
         if (!perms.granted) {
-          Alert.alert('Permissions Required', 'Please allow access to track workout data from settings.');
+          Alert.alert(
+            "Permissions Required",
+            "Please allow access to track workout data from settings."
+          );
+          return;
         }
       }
-      if (perms.granted) {
-        const currentSteps = get().activity.steps
-        subscription = Pedometer.watchStepCount((stepCount) => {
-          const newSteps = stepCount.steps;
-          const steps = currentSteps + newSteps;
-          const caloriesBurnt = get().calculateCalories(steps, userData, get().exerciseIntensity, get().currentExercise!!);
-          const distance = get().calculateDistance(steps, userData, get().exerciseIntensity);
-          set({ activity: { steps, caloriesBurnt, distance } });
 
-          if (get().isExercising) {
-            const currentExerciseData = get().exerciseData;
-            if (currentExerciseData) {
-              set({
-                exerciseData: {
-                  ...currentExerciseData,
-                  steps: steps - get().refActivity.steps,
-                  calories: parseFloat((caloriesBurnt - get().refActivity.caloriesBurnt).toFixed(1)),
-                  distance: parseFloat((distance - get().refActivity.distance).toFixed(1))
-                }
-              });
-            }
+      const currentSteps = get().activity.steps;
+
+      subscription = Pedometer.watchStepCount((stepCount) => {
+        const newSteps = stepCount.steps;
+        const steps = currentSteps + newSteps;
+
+        const caloriesBurnt = get().calculateCalories(
+          steps,
+          userData,
+          get().exerciseIntensity,
+          get().currentExercise || "walk"
+        );
+        const distance = get().calculateDistance(
+          steps,
+          userData,
+          get().exerciseIntensity
+        );
+
+        set({ activity: { steps, caloriesBurnt, distance } });
+
+        if (get().isExercising) {
+          const currentExerciseData = get().exerciseData;
+          if (currentExerciseData) {
+            set({
+              exerciseData: {
+                ...currentExerciseData,
+                steps: steps - get().refActivity.steps,
+                calories: parseFloat(
+                  (caloriesBurnt - get().refActivity.caloriesBurnt).toFixed(1)
+                ),
+                distance: parseFloat(
+                  (distance - get().refActivity.distance).toFixed(1)
+                ),
+              },
+            });
           }
-        });
-      }
+        }
+      });
     } catch (error) {
-      Alert.alert('Error', 'Failed to start step counter. Please try again later.');
+      Alert.alert(
+        "Error",
+        "Failed to start step counter. Please try again later."
+      );
     }
   },
 
   stopStepCounter: () => {
     if (subscription) {
       subscription.remove();
+      subscription = null;
     }
   },
 
-  calculateCalories: (steps: number, user: UserData, intensity: number, exercise: string): number => {
+  calculateCalories: (
+    steps: number,
+    user: UserData,
+    intensity: number,
+    exercise: string
+  ): number => {
     const metValues: { [key: string]: { [key: number]: number } } = {
-      walk: {
-        1: 2.0,
-        2: 3.0,
-        3: 4.0
-      },
-      sprint: {
-        1: 6.5,
-        2: 11.0,
-        3: 14.0
-      }
+      walk: { 1: 2.0, 2: 3.0, 3: 4.0 },
+      sprint: { 1: 6.5, 2: 11.0, 3: 14.0 },
     };
+
     const met = metValues[exercise][intensity];
-    const caloriesBurnt = (met * user.weight * steps * 0.0005);
+    const caloriesBurnt = met * user.weight * steps * 0.0005;
     return parseFloat(caloriesBurnt.toFixed(1));
   },
 
-  calculateDistance: (steps: number, user: UserData, intensity: number): number => {
+  calculateDistance: (
+    steps: number,
+    user: UserData,
+    intensity: number
+  ): number => {
     const strideLengthFactors: { [key: number]: number } = {
-      1: 0.40,
+      1: 0.4,
       2: 0.414,
-      3: 0.45
+      3: 0.45,
     };
+
     const strideFactor = strideLengthFactors[intensity];
     const strideLength = user.height * strideFactor;
     const distanceMeters = (steps * strideLength) / 100;
@@ -280,8 +369,8 @@ export const useStore = create<State>((set, get) => ({
   },
 
   startExercise: () => {
-    if (!(get().isExercising)) {
-      const startTime = new Date().getTime()
+    if (!get().isExercising) {
+      const startTime = Date.now();
       set({
         exerciseData: {
           exercise: get().currentExercise,
@@ -289,168 +378,200 @@ export const useStore = create<State>((set, get) => ({
           calories: 0,
           distance: 0,
           intensity: get().exerciseIntensity,
-          startTime: startTime
+          startTime,
         },
-        refActivity: { ...get().activity }
-      })
+        refActivity: { ...get().activity },
+      });
     } else {
-      const currentExerciseData = get().exerciseData
+      const currentExerciseData = get().exerciseData;
       if (currentExerciseData) {
-        set({ exerciseRecord: [...get().exerciseRecord, currentExerciseData] })
+        set({
+          exerciseRecord: [...get().exerciseRecord, currentExerciseData],
+        });
         set({
           exerciseData: null,
           refActivity: { steps: 0, caloriesBurnt: 0, distance: 0 },
           exerciseIntensity: 1,
-          currentExercise: 'walk'
-        })
-        const userRef = firestore().collection('Users').doc(get().userInfo?.user.email);
-        userRef.update({
-          exerciseRecord: get().exerciseRecord
-        })
+          currentExercise: "walk",
+        });
+
+        const email = get().userInfo?.user.email;
+        if (email) {
+          const userRef = firestore().collection("Users").doc(email);
+          userRef.update({
+            exerciseRecord: get().exerciseRecord,
+          });
+        }
       }
     }
-    set({ isExercising: !(get().isExercising) })
+
+    set({ isExercising: !get().isExercising });
   },
+
   updateDailyStats: async () => {
     try {
-      const userRef = firestore().collection('Users').doc(get().userInfo?.user.email);
+      const email = get().userInfo?.user.email;
+      if (!email) return;
+
+      const userRef = firestore().collection("Users").doc(email);
       const userSnapshot = await userRef.get();
       const data = userSnapshot.data();
 
       if (data) {
         const currentDate = get().date;
-        const activityIndex = get().activityList.findIndex((a: Activity) => a.date === currentDate);
+        const list = [...get().activityList];
+        const activityIndex = list.findIndex(
+          (a: Activity) => a.date === currentDate
+        );
+
         if (activityIndex > -1) {
-          get().activityList[activityIndex] = { ...get().activity, date: currentDate };
+          list[activityIndex] = { ...get().activity, date: currentDate };
         } else {
-          get().activityList.push({ ...get().activity, date: currentDate });
+          list.push({ ...get().activity, date: currentDate });
         }
+
+        set({ activityList: list });
+
         await userRef.update({
-          activityList: get().activityList
+          activityList: list,
         });
       }
     } catch (error) {
       console.log(error);
     }
   },
+
+  // ---------- Meals API ----------
+
   fetchCat: async (category: string) => {
     try {
-      const response = await fetch(`www.themealdb.com/api/json/v1/1/filter.php?c=${category}`)
-      const data = await response.json()
-      set({ meals: data.meals })
+      const response = await fetch(
+        `https://www.themealdb.com/api/json/v1/1/filter.php?c=${category}`
+      );
+      const data = await response.json();
+      set({ meals: data.meals || [] });
     } catch (error) {
-      console.log(error)
+      console.log(error);
     }
   },
+
   fetchIngred: async (ingred: string) => {
-    set({ mealLoading: true })
+    set({ mealLoading: true });
     try {
-      const response = await fetch(`https://www.themealdb.com/api/json/v1/1/filter.php?i=${ingred}`)
-      const data = await response.json()
-      set({ meals: data.meals })
+      const response = await fetch(
+        `https://www.themealdb.com/api/json/v1/1/filter.php?i=${ingred}`
+      );
+      const data = await response.json();
+      set({ meals: data.meals || [] });
     } catch (error) {
-      console.log(error)
+      console.log(error);
     }
-    set({ mealLoading: false })
+    set({ mealLoading: false });
   },
+
   fetchMealData: async (id: string) => {
     try {
-      const response = await fetch(`https://www.themealdb.com/api/json/v1/1/lookup.php?i=${id}`)
-      const data = await response.json()
-      set({ mealData: data.meals[0] })
+      const response = await fetch(
+        `https://www.themealdb.com/api/json/v1/1/lookup.php?i=${id}`
+      );
+      const data = await response.json();
+      set({ mealData: data.meals?.[0] ?? null });
     } catch (error) {
-      console.log(error)
+      console.log(error);
     }
   },
+
+  // ---------- Gemini chat ----------
+
   getGeminiResponse: async (prompt: string, image: string | null = null) => {
-  const { contextHistory } = get();
-  set({ geminiLoading: true });
+    const { contextHistory } = get();
+    set({ geminiLoading: true });
 
-  try {
-    const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const chat = model.startChat({ history: contextHistory });
+    try {
+      const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+      const chat = model.startChat({ history: contextHistory });
 
-    let result;
+      let result;
 
-    if (image) {
-      let base64: string;
+      if (image) {
+        let base64: string;
 
-      if (Platform.OS === 'web') {
-        // Web: use fetch + FileReader
-        const response = await fetch(image);
-        const blob = await response.blob();
+        if (Platform.OS === "web") {
+          const response = await fetch(image);
+          const blob = await response.blob();
 
-        base64 = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onerror = () => reject(reader.error);
-          reader.onload = () => {
-            const dataUrl = reader.result as string;
-            // strip "data:...;base64,"
-            const commaIndex = dataUrl.indexOf(',');
-            resolve(commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl);
-          };
-          reader.readAsDataURL(blob);
-        });
+          base64 = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onerror = () => reject(reader.error);
+            reader.onload = () => {
+              const dataUrl = reader.result as string;
+              const commaIndex = dataUrl.indexOf(",");
+              resolve(
+                commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl
+              );
+            };
+            reader.readAsDataURL(blob);
+          });
+        } else {
+          base64 = await FileSystem.readAsStringAsync(image, {
+            encoding: "base64",
+          });
+        }
+
+        const imagePart: Part = {
+          inlineData: {
+            data: base64,
+            mimeType: "image/png",
+          },
+        };
+
+        result = await chat.sendMessage([prompt, imagePart]);
       } else {
-        // Native (Android / iOS): use Expo FileSystem
-       // Native (Android / iOS): use Expo FileSystem
-      base64 = await FileSystem.readAsStringAsync(image, {
-  encoding: 'base64',
-});
-
+        result = await chat.sendMessage(prompt);
       }
 
-      const imagePart: Part = {
-        inlineData: {
-          data: base64,
-          mimeType: "image/png",
-        },
-      };
+      const response = result.response;
+      const text = response.text();
 
-      result = await chat.sendMessage([
-        prompt,
-        imagePart,
-      ]);
-    } else {
-      result = await chat.sendMessage(prompt);
+      set({
+        messages: [
+          ...get().messages,
+          {
+            message: text,
+            ai: true,
+            time: new Date().toLocaleTimeString().slice(0, -3),
+          },
+        ],
+        contextHistory,
+      });
+
+      return text;
+    } catch (e) {
+      console.log("Gemini error", e);
+      Alert.alert("Error", "Failed to get response from Gemini.");
+      return "";
+    } finally {
+      set({ geminiLoading: false });
     }
-
-    const response = result.response;
-    const text = response.text();
-
-    set({
-      messages: [
-        ...get().messages,
-        {
-          message: text,
-          ai: true,
-          time: new Date().toLocaleTimeString().slice(0, -3),
-        },
-      ],
-      contextHistory,
-    });
-
-    return text;
-  } catch (e) {
-    console.log('Gemini error', e);
-    Alert.alert('Error', 'Failed to get response from Gemini.');
-    return '';
-  } finally {
-    set({ geminiLoading: false });
-  }
-},
+  },
 
   feedInitialGeminiData: async (activityList: Activity[]) => {
     try {
-      const history = get().contextHistory
+      const history = get().contextHistory;
       const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
       const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
       const chat = model.startChat({
-        history: history,
-      })
-      await chat.sendMessage(`This is my all time workout statistics based off of which I can ask questions so remember it. ${JSON.stringify(activityList)}`)
-      set({ contextHistory: history })
+        history,
+      });
+
+      await chat.sendMessage(
+        `This is my all time workout statistics based off of which I can ask questions so remember it. ${JSON.stringify(
+          activityList
+        )}`
+      );
+
+      set({ contextHistory: history });
     } catch (error) {
       console.log(error);
     }
